@@ -5,6 +5,9 @@ var crypto = require('crypto');
 var StompFrame = require('./frame').StompFrame;
 var StompFrameEmitter = require('./parser').StompFrameEmitter;
 
+/*
+Use like this:
+
 var privateKey = fs.readFileSync('CA/newkeyopen.pem', 'ascii');
 var certificate = fs.readFileSync('CA/newcert.pem', 'ascii');
 var certificateAuthority = fs.readFileSync('CA/demoCA/private/cakey.pem', 'ascii');
@@ -13,6 +16,10 @@ var credentials = crypto.createCredentials({
     cert: certificate,
     ca: certificateAuthority,
 });
+
+new SecureStompServer(8124, credentials).listen();
+new StompServer(8125).listen();
+*/
 
 var StompClientCommands = [
     'CONNECT',
@@ -59,13 +66,7 @@ StompQueueManager.prototype.subscribe = function(queue, stream, session, ack) {
 
 StompQueueManager.prototype.publish = function(queue, message) {
     if (!(queue in this.queues)) {
-        throw new StompFrame({
-            command: 'ERROR',
-            headers: {
-                message: 'Queue does not exist',
-            },
-            body: 'Queue "' + frame.headers.destination + '" does not exist',
-        });
+        return false;
     }
     var message = new StompFrame({
        command: 'MESSAGE',
@@ -78,22 +79,18 @@ StompQueueManager.prototype.publish = function(queue, message) {
     this.queues[queue].map(function(subscription) {
        subscription.send(message);
     });
+    return true;
 };
 
 StompQueueManager.prototype.unsubscribe = function(queue, session) {
     if (!(queue in this.queues)) {
-        throw new StompFrame({
-            command: 'ERROR',
-            headers: {
-                message: 'Queue does not exist',
-            },
-            body: 'Queue "' + frame.headers.destination + '" does not exist',
-        });
+        return false;
     }
     // TODO: Profile this
     this.queues[queue] = this.queues[queue].filter(function(subscription) {
         return (subscription.session != session);
     });
+    return true;
 };
 
 function StompStreamHandler(stream, queueManager) {
@@ -134,46 +131,72 @@ function StompStreamHandler(stream, queueManager) {
                 },
             }).send(stream);
         }
-        try {
             switch (frame.command) {
                 case 'CONNECT':
-                    // TODO: Actual authentication
-                    authenticated = true;
-                    sessionId = queueManager.generateSessionId();
-                    new StompFrame({
-                        command: 'CONNECTED',
-                        headers: {
-                            session: sessionId,
-                        }
-                    }).send(stream);
+                    authenticated = queueManager.auth(frame.headers);
+                    if (!authenticated) {
+                        new StompFrame({
+                            command: 'ERROR',
+                            headers: {
+                                message: 'Authentication failed.',
+                            },
+                            body: 'Authentication failed. Please check username and password.',
+                        }).send(stream);
+                    }
+                    else {
+                        sessionId = queueManager.generateSessionId();
+                        new StompFrame({
+                            command: 'CONNECTED',
+                            headers: {
+                                session: sessionId,
+                            }
+                        }).send(stream);
+                    }
                     break;
 
                 case 'SUBSCRIBE':
                     queueManager.subscribe(frame.headers.destination,
                                             stream, sessionId,
                                             frame.headers.ack || "auto");
-                    subscriptions.push(frame.headers.destination);
                     break;
 
                 case 'UNSUBSCRIBE':
-                    queueManager.unsubscribe(frame.headers.destination, sessionId);
+                    if (!queueManager.unsubscribe(frame.headers.destination, sessionId)) {
+                        new StompFrame({
+                            command: 'ERROR',
+                            headers: {
+                                message: 'Queue does not exist'
+                            },
+                            body: 'Queue "' + frame.headers.destination + '" does not exist.'
+                        }).send(stream);
+                    }
                     break;
 
                 case 'SEND':
-                    queueManager.publish(frame.headers.destination, frame.body);
+                    if (!queueManager.publish(frame.headers.destination, frame.body)) {
+                        new StompFrame({
+                            command: 'ERROR',
+                            headers: {
+                                message: 'Queue does not exist'
+                            },
+                            body: 'Queue "' + frame.headers.destination + '" does not exist.'
+                        }).send(stream);
+                    }
                     break;
 
                 case 'BEGIN':
                     if (frame.headers.transaction in transactions) {
-                        throw new StompFrame({
+                        new StompFrame({
                             command: 'ERROR',
                             headers: {
                                 message: 'Transaction already exists',
                             },
                             body: 'Transaction "' + frame.headers.transaction + '" already exists',
-                        });
+                        }).send(stream);
                     }
-                    transactions[frame.headers.transaction] = [];
+                    else {
+                        transactions[frame.headers.transaction] = [];
+                    }
                     break;
 
                 case 'COMMIT':
@@ -185,17 +208,13 @@ function StompStreamHandler(stream, queueManager) {
                     delete transactions[frame.headers.transaction]
                     break;
 
-                case 'DISCONECT':
+                case 'DISCONNECT':
                     subscriptions.map(function(queue) {
                         queueManager.unsubscribe(queue, sessionId);
                     });
                     stream.end();
                     break;
             }
-        }
-        catch (e) {
-            e.send(stream);
-        }
     });
 
     frameEmitter.on('error', function(err) {
@@ -209,20 +228,20 @@ function StompStreamHandler(stream, queueManager) {
     });
 };
 
-function StompServer(port) {
+function StompServer(port, queueManagerClass) {
     this.port = port;
-    var queueManager = new StompQueueManager();
+    queueManagerClass = queueManagerClass || StompQueueManager;
     this.server = net.createServer(function(stream) {
         stream.on('connect', function() {
             console.log('Received Unsecured Connection');
-            new StompStreamHandler(stream, queueManager);
+            new StompStreamHandler(stream, new queueManagerClass());
         });
     });
 }
 
-function SecureStompServer(port, credentials) {
+function SecureStompServer(port, credentials, queueManagerClass) {
     StompServer.call(this);
-    var queueManager = new StompQueueManager();
+    queueManagerClass = queueManagerClass || StompQueueManager;
     this.port = port;
     this.server = net.createServer(function (stream) {
         stream.on('connect', function () {
@@ -230,7 +249,7 @@ function SecureStompServer(port, credentials) {
             stream.setSecure(credentials);
         });
         stream.on('secure', function () {
-            new StompStreamHandler(stream, queueManager);
+            new StompStreamHandler(stream, new queueManagerClass());
         });
     });
 }
@@ -245,5 +264,7 @@ StompServer.prototype.stop = function(port) {
     this.server.close();
 };
 
-new SecureStompServer(8124, credentials).listen();
-new StompServer(8125).listen();
+exports.StompServer = StompServer
+exports.SecureStompServer = SecureStompServer
+exports.StompSubscription = StompSubscription
+exports.StompFrame = StompFrame
