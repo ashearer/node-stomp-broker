@@ -229,8 +229,15 @@ function StompStreamHandler(stream, queueManager) {
     });
 };
 
-function StompServer(port, queueManagerClass) {
+function StompServer(port, queueManagerClass, host) {
+    /*
+    'host' specifies the interface on which to listen.
+    Pass the empty string for all interfaces.
+    Pass an IP address to limit to a single interface.
+    Pass 'localhost' or omit parameter to limit to loopback only.
+    */
     this.port = port;
+    this.host = (host || host === '') ? host : 'localhost';
     queueManagerClass = queueManagerClass || StompQueueManager;
     this.server = net.createServer(function(stream) {
         stream.on('connect', function() {
@@ -240,8 +247,15 @@ function StompServer(port, queueManagerClass) {
     });
 }
 
-function SecureStompServer(port, credentials, queueManagerClass) {
+function SecureStompServer(port, credentials, queueManagerClass, host) {
+    /*
+    'host' specifies the interface on which to listen.
+    Pass the empty string for all interfaces.
+    Pass an IP address to limit to a single interface.
+    Pass 'localhost' or omit parameter to limit to loopback only.
+    */
     this.port = port;
+    this.host = (host || host === '') ? host : 'localhost';
     queueManagerClass = queueManagerClass || StompQueueManager;
     this.server = tls.createServer(credentials, function(stream) {
         stream.on('connect', function() {
@@ -254,7 +268,7 @@ function SecureStompServer(port, credentials, queueManagerClass) {
 sys.inherits(SecureStompServer, StompServer);
 
 StompServer.prototype.listen = function() {
-    this.server.listen(this.port, 'localhost');
+    this.server.listen(this.port, this.host);
 };
 
 StompServer.prototype.stop = function(port) {
