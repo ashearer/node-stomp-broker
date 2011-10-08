@@ -97,11 +97,7 @@ function SecureStompClient(address, port, user, pass, credentials) {
     self.user = user;
     self.pass = pass;
     self.subscriptions = {};
-    self.stream = net.createConnection(port, address);
-    self.stream.on('connect', function() {
-        self.stream.setSecure(credentials);
-    });
-    self.stream.on('secure', function() {
+    self.stream = tls.connect(port, address, credentials, function() {
         self.onConnect();
     });
 };

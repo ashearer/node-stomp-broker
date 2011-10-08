@@ -1,6 +1,7 @@
 var net = require('net');
 var fs = require('fs');
 var sys = require('sys');
+var tls = require('tls');
 var crypto = require('crypto');
 var StompFrame = require('./frame').StompFrame;
 var StompFrameEmitter = require('./parser').StompFrameEmitter;
@@ -240,15 +241,11 @@ function StompServer(port, queueManagerClass) {
 }
 
 function SecureStompServer(port, credentials, queueManagerClass) {
-    StompServer.call(this);
-    queueManagerClass = queueManagerClass || StompQueueManager;
     this.port = port;
-    this.server = net.createServer(function (stream) {
-        stream.on('connect', function () {
-            console.log('Received Connection, securing');
-            stream.setSecure(credentials);
-        });
-        stream.on('secure', function () {
+    queueManagerClass = queueManagerClass || StompQueueManager;
+    this.server = tls.createServer(credentials, function(stream) {
+        stream.on('connect', function() {
+            console.log('Received Secured Connection');
             new StompStreamHandler(stream, new queueManagerClass());
         });
     });
