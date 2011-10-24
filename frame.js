@@ -28,7 +28,7 @@ StompFrame.prototype.send = function(stream) {
     if (this.body.length > 0) {
         stream.write(this.body);
     }
-    stream.write('\0');
+    stream.write(new Buffer([0]));
 };
 
 StompFrame.prototype.setCommand = function(command) {

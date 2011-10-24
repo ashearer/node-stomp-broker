@@ -1,6 +1,7 @@
 var net = require('net');
 var fs = require('fs');
 var sys = require('sys');
+var tls = require('tls');
 var events = require('events');
 var crypto = require('crypto');
 var StompFrame = require('./frame').StompFrame;

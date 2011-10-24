@@ -258,10 +258,8 @@ function SecureStompServer(port, credentials, queueManagerClass, host) {
     this.host = (host || host === '') ? host : 'localhost';
     queueManagerClass = queueManagerClass || StompQueueManager;
     this.server = tls.createServer(credentials, function(stream) {
-        stream.on('connect', function() {
-            console.log('Received Secured Connection');
-            new StompStreamHandler(stream, new queueManagerClass());
-        });
+        console.log('Received Secured Connection');
+        new StompStreamHandler(stream, new queueManagerClass());
     });
 }
 
