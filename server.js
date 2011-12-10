@@ -94,6 +94,9 @@ StompQueueManager.prototype.unsubscribe = function(queue, session) {
     return true;
 };
 
+StompQueueManager.prototype.destroy = function() {
+};
+
 function StompStreamHandler(stream, queueManager) {
     var frameEmitter = new StompFrameEmitter(StompClientCommands);
     var authenticated = false;
@@ -109,6 +112,7 @@ function StompStreamHandler(stream, queueManager) {
         subscriptions.map(function(queue) {
             queueManager.unsubscribe(queue, sessionId);
         });
+        queueManager.destroy();
         stream.end();
     });
 
