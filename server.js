@@ -1,6 +1,6 @@
 var net = require('net');
 var fs = require('fs');
-var sys = require('sys');
+var util = require('util');
 var tls = require('tls');
 var crypto = require('crypto');
 var StompFrame = require('./frame').StompFrame;
@@ -263,7 +263,7 @@ function SecureStompServer(port, credentials, queueManagerClass, host) {
     });
 }
 
-sys.inherits(SecureStompServer, StompServer);
+util.inherits(SecureStompServer, StompServer);
 
 StompServer.prototype.listen = function() {
     this.server.listen(this.port, this.host);
